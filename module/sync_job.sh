@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ==============================================================================
-# QuackStore: 动态自适应多后端 + 2100年 AOSP RSA 占位兼容 + 备用高可用通道回退
+# QuackStore: 动态自适应多后端同步 + 备用高可用通道回退
 # ==============================================================================
 
 MODDIR="${0%/*}"
@@ -10,7 +10,6 @@ LAST_RUN_FILE="$VARDIR/last_run"
 TEMP_KEYBOX="$VARDIR/temp_keybox.xml"
 QUACKCTL="$MODDIR/bin/quackctl.sh"
 [ -x "$QUACKCTL" ] || QUACKCTL="/data/adb/modules/quack-store/bin/quackctl.sh"
-RSA_BLOCK_FILE="$MODDIR/aosp_rsa_block.xml"
 
 mkdir -p "$VARDIR"
 touch "$LOG_FILE"
@@ -64,33 +63,12 @@ if ! grep -q "<Keybox" "$TEMP_KEYBOX" || ! grep -q "</Keybox>" "$TEMP_KEYBOX"; t
 fi
 
 KEYBOX_SIZE=$(wc -c < "$TEMP_KEYBOX" | tr -d ' ')
-log "RKP Keybox 签发成功！原始大小: ${KEYBOX_SIZE} 字节"
+log "RKP Keybox 签发成功！大小: ${KEYBOX_SIZE} 字节 (纯 EC)"
 
-# 4.1 核心兼容处理: 检测是否缺少 RSA 算法节点 (针对尚未发布 b12557c 的正式版 OMK)
-if ! grep -q 'algorithm="rsa"' "$TEMP_KEYBOX"; then
-    log "检测到 Keybox 仅含 ECDSA，缺少 RSA 节点。准备补齐 AOSP RSA 占位块..."
-    if [ -f "$RSA_BLOCK_FILE" ]; then
-        MERGED_KEYBOX="${TEMP_KEYBOX}.merged"
-        awk -v rfile="$RSA_BLOCK_FILE" '
-            /<\/Keybox>/ {
-                while ((getline l < rfile) > 0) print l
-                close(rfile)
-            }
-            { print }
-        ' "$TEMP_KEYBOX" > "$MERGED_KEYBOX"
-
-        if grep -q 'algorithm="rsa"' "$MERGED_KEYBOX" && grep -q 'algorithm="ecdsa"' "$MERGED_KEYBOX"; then
-            mv -f "$MERGED_KEYBOX" "$TEMP_KEYBOX"
-            NEW_SIZE=$(wc -c < "$TEMP_KEYBOX" | tr -d ' ')
-            log "已成功注入 AOSP RSA 占位块！合成 Keybox 大小: ${NEW_SIZE} 字节 (双算法齐全)"
-        else
-            rm -f "$MERGED_KEYBOX"
-            log "警告: RSA 占位块注入失败，保持原纯 ECDSA 继续"
-        fi
-    else
-        log "警告: 未找到 $RSA_BLOCK_FILE，跳过 RSA 注入"
-    fi
-fi
+# 说明: 不再注入 AOSP 软件 RSA 占位块。该块的私钥来自 AOSP 源码公开的
+# 软件证明密钥，一旦并入，整份 keybox 会被判定为软件签名，设备级完整性
+# 直接退化到 BASIC。OhMyKeymint 在缺少 RSA 节点时会自行回退到它内置的
+# AOSP RSA 条目，因此纯 EC keybox 对三个后端均可正常加载。
 
 # 5. 自动安装到当前激活的 Keystore 模块 (Tricky Store / OhMyKeymint / TEESimulator)
 log "正在同步安装到当前活跃的 Keystore 模块..."

@@ -120,7 +120,7 @@ day_of_week = ${schedDow.value}
 hour = ${schedHour.value}
 
 [compat]
-inject_legacy_rsa = true
+inject_legacy_rsa = false
 
 [network]
 server_strategy = "auto"

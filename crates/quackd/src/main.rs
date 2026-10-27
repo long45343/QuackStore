@@ -3,7 +3,6 @@
 
 mod builtin;
 pub mod daemon;
-pub mod rsa_2100;
 
 use clap::{Arg, ArgAction, error::ErrorKind};
 use quack_core::{

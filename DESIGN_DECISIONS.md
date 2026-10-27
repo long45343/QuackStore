@@ -74,8 +74,8 @@
   * 优劣：在 `install` 函数中检查当前后端是否为 OMK，按需动态追加，保持 RKP 输出纯净。
 - **选项 C：可配置开关驱动（Config-driven Synthesis，推荐）**
   * 优劣：在 `config.toml` 中配置 `inject_legacy_rsa = true`（默认开启），生成时自动按需并入；未来当 OMK 官方发版支持纯 EC 时，用户可无感一键关闭，前瞻性与灵活性最强。
-- **当前状态**：已确认 (Confirmed)
-- **选择结果**：选项 C (可配置开关驱动：2100年 RSA 模板内嵌至 Rust 引擎，通过 config.toml 配置控制是否在签发时并入双算法，默认开启，兼顾当下通杀与未来纯净切换)
+- **当前状态**：已废弃 (Deprecated, v1.0.2)
+- **选择结果**：选项 C 已在实测中被否决并移除。AOSP RSA 占位块的私钥来自 AOSP `soft_attestation_cert.cpp`，属于**公开的软件证明密钥**；一旦并入 keybox，整份文件会被判定为软件签名，Play Integrity 设备级完整性直接退化到 BASIC，且与后端无关（OMK / Tricky Store / TEESimulator 表现一致）。现改为仅保留芯片 TA 签发、Google RKP 认证的纯 ECDSA 链；OhMyKeymint 在缺少 RSA 节点时会自动回退到其内置 AOSP 条目，三个后端均可正常加载。`inject_legacy_rsa` 配置项保留但已忽略（仅兼容旧 `config.toml`），`crates/quackd/src/rsa_2100.rs` 与 `module/aosp_rsa_block.xml` 已删除。
 
 ---
 
@@ -126,14 +126,14 @@
 | :--- | :--- | :---: | :--- |
 | **代码依赖闭环** | Q1 (按需移植) ↔ Q2 (重命名 quackd) | **✅ 完美自洽** | 在构建全新干净 Cargo Workspace 时，直接以 `quack-*` 命名各个 crate（如 `quack-core`, `quack-rkp`, `quack-tricky-store`, `quackd`），避免了二次重命名的繁琐。 |
 | **守护进程与配置** | Q2 (quackd) ↔ Q3 (Rust Daemon) | **✅ 完美自洽** | `quackd daemon` 作为主二进制的子命令常驻，开机时只需由 `service.sh` 启动一条命令，无外部 shell 解析碎片。 |
-| **配置项与注入开关** | Q3 (quack.toml) ↔ Q4 (开关驱动 RSA) | **✅ 完美自洽** | `config.toml` 作为全局中心配置文件，同时承载 `[scheduler]` 定时规则与 `[compat] inject_legacy_rsa = true` 选项，由 `quackd` 统一读取，职责清晰。 |
+| **配置项与注入开关** | Q3 (quack.toml) ↔ Q4 (开关驱动 RSA) | **⚠️ 已废弃** | Q4 的 RSA 注入因引入公开软件密钥导致判定退化至 BASIC，已整体移除。`[compat] inject_legacy_rsa` 仍被解析但恒被忽略，仅用于兼容旧配置文件；keybox 现为纯 EC 链。 |
 | **UI 与功能对齐** | Q4 (RSA 开关) ↔ Q5 (双核心仪表盘) | **✅ 完美自洽** | 双核心仪表盘的「自动签名与调度」卡片中，可以直接提供「兼容旧版 OMK (注入 RSA 占位)」的即时切换 Switch，状态与底层配置双向绑定。 |
 | **多后端自适应一致性**| Q5 (仪表盘) ↔ Q6 (覆盖三大后端) | **✅ 完美自洽** | 「密钥与目标管理」页面根据后端自动适配 UI，保留 Tricky Store、OhMyKeymint、TEESimulator 完整支持，普适性最强且无缝衔接。 |
 | **编译打包能力** | Q6 (三后端支持) ↔ Q7 (双模构建流水线) | **✅ 完美自洽** | 移除了 `duck-device-ids` 和 `duck-tee-attestation` 两个重型无用模块后，代码行数与依赖项大幅减少，本地与云端交叉编译耗时降低约 35%~40%，生成物更加精简。 |
 
 ### 2. 结论与综合判定 (Audit Conclusion)
 * **冲突检查**：**0 项潜在冲突 (No Conflicts Detected)**。所有 7 项决策在数据流、配置流、进程模型和构建链路上全部形成了严密闭环。
-* **合理性评估**：**极高 (High Cohesion & Low Coupling)**。项目兼顾了纯净性（无多余代码）、独立品牌标识（QuackStore/quackd）、前瞻性（可开关 2100年 RSA）、高可用性（全后端自适应 + 双卡片现代 UI）以及完善的工程交付能力（双模构建）。
+* **合理性评估**：**极高 (High Cohesion & Low Coupling)**。项目兼顾了纯净性（无多余代码）、独立品牌标识（QuackStore/quackd）、硬件纯度（纯 EC 证书链，不掺公开软件密钥）、高可用性（全后端自适应 + 双卡片现代 UI）以及完善的工程交付能力（双模构建）。
 
 ---
 

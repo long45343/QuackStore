@@ -1,6 +1,6 @@
 id=quack-store
 name=QuackStore
-version=v1.0.0-alpha
-versionCode=100
+version=v1.0.2-alpha
+versionCode=102
 author=long45343 (based on Duck-ToolBox by Eltavine)
-description=三合一高通硬件 RKP 自动签发、多后端 Keystore 统一管理与每周四定时同步套件 (内置 2100年 RSA 兼容与高可用网络回退)
+description=三合一高通硬件 RKP 自动签发、多后端 Keystore 统一管理与每周四定时同步套件 (纯硬件 EC 证书链，高可用网络回退)

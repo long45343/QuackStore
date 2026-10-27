@@ -70,21 +70,23 @@ jobs:
         run: |
           mkdir -p dist module/bin
           cp target/aarch64-linux-android/release/quackd module/bin/quackd
+          rm -f module/bin/duckd
           chmod 755 module/bin/quackd module/bin/quackctl.sh module/*.sh
+          version="$(sed -n 's/^version=//p' module/module.prop)"
           cd module
-          zip -r ../dist/quack-store-v1.0.0-alpha.zip ./*
+          zip -r "../dist/quack-store-${version}.zip" ./*
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: quack-store-v1.0.0-alpha
-          path: dist/quack-store-v1.0.0-alpha.zip
+          name: quack-store-module
+          path: dist/quack-store-*.zip
 
       - name: Release on Tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/quack-store-v1.0.0-alpha.zip
+          files: dist/quack-store-*.zip
           draft: false
           prerelease: false
           generate_release_notes: true

@@ -6,8 +6,6 @@ use anyhow::{Context as _, Result};
 use quack_core::{AppPaths, Context};
 use serde::{Deserialize, Serialize};
 
-use crate::rsa_2100::inject_rsa_if_missing;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
     #[serde(default = "default_true")]
@@ -31,7 +29,10 @@ pub struct SchedulerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatConfig {
-    #[serde(default = "default_true")]
+    /// Deprecated and ignored: injecting the AOSP software RSA key into a keybox makes the
+    /// whole file software-signed, which drops device-integrity verdicts to basic. Kept only
+    /// so older `config.toml` files still parse; no keybox is modified.
+    #[serde(default)]
     pub inject_legacy_rsa: bool,
 }
 
@@ -75,7 +76,7 @@ impl Default for SchedulerConfig {
 impl Default for CompatConfig {
     fn default() -> Self {
         Self {
-            inject_legacy_rsa: default_true(),
+            inject_legacy_rsa: false,
         }
     }
 }
@@ -155,16 +156,18 @@ pub async fn run_sync_once(ctx: &Context) -> Result<quack_tricky_store::keybox::
     };
 
     let result = quack_rkp_device::execute_provision(ctx, true, options, server_url).await?;
-    let mut keybox_content = result.keybox_xml;
-    log_message(&ctx.paths, &format!("RKP 签发成功，原始 XML 大小: {} 字节", keybox_content.len()));
-
-    // 3. 2100年 RSA 兼容注入
+    let keybox_content = result.keybox_xml;
+    log_message(&ctx.paths, &format!("RKP 签发成功，Keybox 大小: {} 字节 (纯 EC，未注入软件 RSA)", keybox_content.len()));
     if config.compat.inject_legacy_rsa {
-        keybox_content = inject_rsa_if_missing(&keybox_content);
-        log_message(&ctx.paths, &format!("已成功并入 2100年 AOSP RSA 占位块，合成 XML 大小: {} 字节", keybox_content.len()));
+        log_message(
+            &ctx.paths,
+            "提示: config.toml 仍设置 inject_legacy_rsa = true，该选项已被废弃并忽略。\
+             注入的 AOSP 软件 RSA 私钥来自公开源码，会让整份 keybox 被判为软件签名，\
+             设备级完整性会退化到 BASIC。",
+        );
     }
 
-    // 4. 同步安装到当前活跃的 Keystore 模块
+    // 3. 同步安装到当前活跃的 Keystore 模块
     log_message(&ctx.paths, "正在自动安装到当前激活的 Keystore 模块...");
     let install_data = quack_tricky_store::keybox::install(ctx, &keybox_content, "quack-sync")?;
     log_message(&ctx.paths, &format!(
@@ -172,7 +175,7 @@ pub async fn run_sync_once(ctx: &Context) -> Result<quack_tricky_store::keybox::
         install_data.backend, install_data.target_path
     ));
 
-    // 5. 更新 last_run 记录
+    // 4. 更新 last_run 记录
     let now = time::OffsetDateTime::now_utc();
     let today = format!("{:04}-{:02}-{:02}", now.year(), u8::from(now.month()), now.day());
     let _ = fs::write(ctx.paths.data_root.join("last_run"), today);
